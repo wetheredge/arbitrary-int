@@ -8,12 +8,8 @@ use core::ops::{
 struct CompileTimeAssert<const A: usize, const B: usize> {}
 
 impl<const A: usize, const B: usize> CompileTimeAssert<A, B> {
-    pub const SMALLER_OR_EQUAL: () = {
-        assert!(A <= B);
-    };
-    pub const SMALLER_THAN: () = {
-        assert!(A <= B);
-    };
+    pub const LESS_THAN_OR_EQUAL: () = assert!(A <= B);
+    pub const LESS_THAN: () = assert!(A < B);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Ord, PartialOrd)]
@@ -87,7 +83,7 @@ macro_rules! uint_impl {
                 pub const fn widen<const NUM_BITS_RESULT: usize>(
                     &self,
                 ) -> UInt<$type, NUM_BITS_RESULT> {
-                    let _ = CompileTimeAssert::<NUM_BITS, NUM_BITS_RESULT>::SMALLER_THAN;
+                    let _ = CompileTimeAssert::<NUM_BITS, NUM_BITS_RESULT>::LESS_THAN;
                     // Query MAX of the result to ensure we get a compiler error if the current definition is bogus (e.g. <u8, 9>)
                     let _ = UInt::<$type, NUM_BITS_RESULT>::MAX;
                     UInt::<$type, NUM_BITS_RESULT>(self.0)
@@ -332,7 +328,7 @@ macro_rules! from_impl {
                 for UInt<$into, NUM_BITS>
             {
                 fn from(item: UInt<$from, NUM_BITS_FROM>) -> Self {
-                    let _ = CompileTimeAssert::<NUM_BITS_FROM, NUM_BITS>::SMALLER_OR_EQUAL;
+                    let _ = CompileTimeAssert::<NUM_BITS_FROM, NUM_BITS>::LESS_THAN_OR_EQUAL;
                     Self(item.0 as $into)
                 }
             }
