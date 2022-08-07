@@ -322,7 +322,7 @@ where
 
 // Conversions
 macro_rules! from_impl {
-    ($from:ty, [$($into:ty),+]) => {
+    (uint, $from:ty, [$($into:ty),+]) => {
         $(
             impl<const NUM_BITS: usize, const NUM_BITS_FROM: usize> From<UInt<$from, NUM_BITS_FROM>>
                 for UInt<$into, NUM_BITS>
@@ -334,13 +334,36 @@ macro_rules! from_impl {
             }
         )+
     };
+    (native, $from:ty, [$($into:ty),+]) => {
+        $(
+            impl<const NUM_BITS: usize> From<$from> for UInt<$into, NUM_BITS> {
+                fn from(from: $from) -> Self {
+                    let _ = CompileTimeAssert::<{ <$from>::BITS as usize }, NUM_BITS>::LESS_THAN_OR_EQUAL;
+                    Self(from as $into)
+                }
+            }
+
+            impl<const NUM_BITS: usize> From<UInt<$from, NUM_BITS>> for $into {
+                fn from(from: UInt<$from, NUM_BITS>) -> Self {
+                    let _ = CompileTimeAssert::<NUM_BITS, { <$into>::BITS as usize }>::LESS_THAN_OR_EQUAL;
+                    from.0 as $into
+                }
+            }
+        )+
+    }
 }
 
-from_impl!(u8, [u16, u32, u64, u128]);
-from_impl!(u16, [u8, u32, u64, u128]);
-from_impl!(u32, [u8, u16, u64, u128]);
-from_impl!(u64, [u8, u16, u32, u128]);
-from_impl!(u128, [u8, u32, u64, u16]);
+from_impl!(uint, u8, [u16, u32, u64, u128]);
+from_impl!(uint, u16, [u8, u32, u64, u128]);
+from_impl!(uint, u32, [u8, u16, u64, u128]);
+from_impl!(uint, u64, [u8, u16, u32, u128]);
+from_impl!(uint, u128, [u8, u16, u32, u64]);
+
+from_impl!(native, u8, [u8, u16, u32, u64, u128]);
+from_impl!(native, u16, [u8, u16, u32, u64, u128]);
+from_impl!(native, u32, [u8, u16, u32, u64, u128]);
+from_impl!(native, u64, [u8, u16, u32, u64, u128]);
+from_impl!(native, u128, [u8, u16, u32, u64, u128]);
 
 // Define type aliases like u1, u63 and u80 using the smallest possible underlying data type.
 // These are for convenience only - UInt<u32, 15> is still legal
