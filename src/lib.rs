@@ -26,9 +26,7 @@ impl<const A: usize, const B: usize> CompileTimeAssert<A, B> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Ord, PartialOrd)]
-pub struct UInt<T, const NUM_BITS: usize> {
-    value: T,
-}
+pub struct UInt<T, const NUM_BITS: usize>(T);
 
 impl<T, const NUM_BITS: usize> UInt<T, NUM_BITS>
 where
@@ -40,11 +38,11 @@ where
         + From<u8>,
 {
     pub const fn value(&self) -> T {
-        self.value
+        self.0
     }
 
     pub const unsafe fn new_unchecked(value: T) -> Self {
-        Self { value }
+        Self(value)
     }
 
     fn mask() -> T {
@@ -67,20 +65,18 @@ macro_rules! uint_impl {
         $(
             impl<const NUM_BITS: usize> UInt<$type, NUM_BITS> {
                 /// Minimum value that can be represented by this type
-                pub const MIN: Self = Self { value: 0 };
+                pub const MIN: Self = Self(0);
 
                 /// Maximum value that can be represented by this type
                 /// Note that the existence of MAX also serves as a bounds check: If NUM_BITS is > available bits,
                 /// we will get a compiler error right here
-                pub const MAX: Self = Self {
-                    value: $type::MAX >> ($type::BITS as usize - NUM_BITS),
-                };
+                pub const MAX: Self = Self($type::MAX >> ($type::BITS as usize - NUM_BITS));
 
                 /// Creates an instance. Panics if the given value is outside of the valid range
                 pub const fn new(value: $type) -> Self {
-                    assert!(value <= Self::MAX.value);
+                    assert!(value <= Self::MAX.0);
 
-                    Self { value }
+                    Self(value)
                 }
 
                 /// Extracts bits from a given value. The extract is equivalent to: `new((value >> start_bit) & MASK)`
@@ -90,10 +86,8 @@ macro_rules! uint_impl {
                     // Query MAX to ensure that we get a compiler error if the current definition is bogus (e.g. <u8, 9>)
                     let _ = Self::MAX;
 
-                Self {
-                    value: (value >> start_bit) & Self::MAX.value,
+                    Self((value >> start_bit) & Self::MAX.0)
                 }
-            }
 
                 /// Returns a UInt with a wider bit depth but with the same base data type
                 pub const fn widen<const NUM_BITS_RESULT: usize>(
@@ -102,7 +96,7 @@ macro_rules! uint_impl {
                     let _ = CompileTimeAssert::<NUM_BITS, NUM_BITS_RESULT>::SMALLER_THAN;
                     // Query MAX of the result to ensure we get a compiler error if the current definition is bogus (e.g. <u8, 9>)
                     let _ = UInt::<$type, NUM_BITS_RESULT>::MAX;
-                    UInt::<$type, NUM_BITS_RESULT> { value: self.value }
+                    UInt::<$type, NUM_BITS_RESULT>(self.0)
                 }
             }
         )+
@@ -128,14 +122,14 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let sum = self.value + rhs.value;
+        let sum = self.0 + rhs.0;
+
         #[cfg(debug_assertions)]
         if (sum & !Self::mask()) != T::from(0) {
             panic!("attempt to add with overflow");
         }
-        Self {
-            value: sum & Self::mask(),
-        }
+
+        Self(sum & Self::mask())
     }
 }
 
@@ -154,12 +148,14 @@ where
         + From<u8>,
 {
     fn add_assign(&mut self, rhs: Self) {
-        self.value += rhs.value;
+        self.0 += rhs.0;
+
         #[cfg(debug_assertions)]
-        if (self.value & !Self::mask()) != T::from(0) {
+        if (self.0 & !Self::mask()) != T::from(0) {
             panic!("attempt to add with overflow");
         }
-        self.value &= Self::mask();
+
+        self.0 &= Self::mask();
     }
 }
 
@@ -176,9 +172,7 @@ where
 
     fn sub(self, rhs: Self) -> Self::Output {
         // No need for extra overflow checking as the regular minus operator already handles it for us
-        Self {
-            value: (self.value - rhs.value) & Self::mask(),
-        }
+        Self((self.0 - rhs.0) & Self::mask())
     }
 }
 
@@ -195,8 +189,8 @@ where
 {
     fn sub_assign(&mut self, rhs: Self) {
         // No need for extra overflow checking as the regular minus operator already handles it for us
-        self.value -= rhs.value;
-        self.value &= Self::mask();
+        self.0 -= rhs.0;
+        self.0 &= Self::mask();
     }
 }
 
@@ -212,9 +206,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Self {
-            value: self.value & rhs.value,
-        }
+        Self(self.0 & rhs.0)
     }
 }
 
@@ -223,7 +215,7 @@ where
     T: Copy + BitAndAssign<T> + Sub<T, Output = T> + Shl<usize, Output = T> + From<u8>,
 {
     fn bitand_assign(&mut self, rhs: Self) {
-        self.value &= rhs.value;
+        self.0 &= rhs.0;
     }
 }
 
@@ -234,9 +226,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Self {
-            value: self.value | rhs.value,
-        }
+        Self(self.0 | rhs.0)
     }
 }
 
@@ -245,7 +235,7 @@ where
     T: Copy + BitOrAssign<T> + Sub<T, Output = T> + Shl<usize, Output = T> + From<u8>,
 {
     fn bitor_assign(&mut self, rhs: Self) {
-        self.value |= rhs.value;
+        self.0 |= rhs.0;
     }
 }
 
@@ -256,9 +246,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self {
-            value: self.value ^ rhs.value,
-        }
+        Self(self.0 ^ rhs.0)
     }
 }
 
@@ -267,7 +255,7 @@ where
     T: Copy + BitXorAssign<T> + Sub<T, Output = T> + Shl<usize, Output = T> + From<u8>,
 {
     fn bitxor_assign(&mut self, rhs: Self) {
-        self.value ^= rhs.value;
+        self.0 ^= rhs.0;
     }
 }
 
@@ -284,9 +272,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn not(self) -> Self::Output {
-        Self {
-            value: self.value ^ Self::mask(),
-        }
+        Self(self.0 ^ Self::mask())
     }
 }
 
@@ -303,9 +289,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn shl(self, rhs: TSHIFTBITS) -> Self::Output {
-        Self {
-            value: (self.value << rhs) & Self::mask(),
-        }
+        Self((self.0 << rhs) & Self::mask())
     }
 }
 
@@ -321,8 +305,8 @@ where
         + From<u8>,
 {
     fn shl_assign(&mut self, rhs: TSHIFTBITS) {
-        self.value <<= rhs;
-        self.value &= Self::mask();
+        self.0 <<= rhs;
+        self.0 &= Self::mask();
     }
 }
 
@@ -333,9 +317,7 @@ where
     type Output = UInt<T, NUM_BITS>;
 
     fn shr(self, rhs: TSHIFTBITS) -> Self::Output {
-        Self {
-            value: self.value >> rhs,
-        }
+        Self(self.0 >> rhs)
     }
 }
 
@@ -344,7 +326,7 @@ where
     T: Copy + ShrAssign<TSHIFTBITS> + Sub<T, Output = T> + Shl<usize, Output = T> + From<u8>,
 {
     fn shr_assign(&mut self, rhs: TSHIFTBITS) {
-        self.value >>= rhs;
+        self.0 >>= rhs;
     }
 }
 
@@ -357,7 +339,7 @@ macro_rules! from_impl {
             {
                 fn from(item: UInt<$from, NUM_BITS_FROM>) -> Self {
                     let _ = CompileTimeAssert::<NUM_BITS_FROM, NUM_BITS>::SMALLER_OR_EQUAL;
-                    Self { value: item.value as $into }
+                    Self(item.0 as $into)
                 }
             }
         )+
