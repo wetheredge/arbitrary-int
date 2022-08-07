@@ -32,6 +32,9 @@ where
         self.0
     }
 
+    /// # Safety
+    ///
+    /// Must only be called with a value less than or equal to [Self::MAX](Self::MAX) value.
     pub const unsafe fn new_unchecked(value: T) -> Self {
         Self(value)
     }
