@@ -5,6 +5,26 @@ use core::ops::{
     ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
+pub trait Number: Sized {
+    const BITS: usize;
+    const MIN: Self;
+    const MAX: Self;
+}
+
+macro_rules! impl_number_native {
+    ($( $type:ty ),+) => {
+        $(
+            impl Number for $type {
+                const BITS: usize = Self::BITS as usize;
+                const MIN: Self = Self::MIN;
+                const MAX: Self = Self::MAX;
+            }
+        )+
+    };
+}
+
+impl_number_native!(u8, u16, u32, u64, u128);
+
 struct CompileTimeAssert<const A: usize, const B: usize> {}
 
 impl<const A: usize, const B: usize> CompileTimeAssert<A, B> {
@@ -16,18 +36,8 @@ impl<const A: usize, const B: usize> CompileTimeAssert<A, B> {
 #[repr(transparent)]
 pub struct UInt<T, const BITS: usize>(T);
 
-impl<T, const BITS: usize> UInt<T, BITS>
-where
-    T: Copy
-        + BitAnd<T, Output = T>
-        + Sub<T, Output = T>
-        + Shl<usize, Output = T>
-        + Shr<usize, Output = T>
-        + From<u8>,
-{
-    pub const fn value(&self) -> T {
-        self.0
-    }
+impl<T, const BITS: usize> UInt<T, BITS> {
+    pub const BITS: usize = BITS;
 
     /// # Safety
     ///
@@ -35,14 +45,21 @@ where
     pub const unsafe fn new_unchecked(value: T) -> Self {
         Self(value)
     }
+}
 
-    fn mask() -> T {
-        // It would be great if we could make this function const, but generic traits aren't compatible with
-        // const fn
-        // Also note that we have to use T::from(1) (as opposed to doing that at the end), as we
-        // only require From(u8) in the generic constraints.
-        let one = T::from(1);
-        (one << BITS) - one
+impl<T: Copy, const BITS: usize> UInt<T, BITS> {
+    pub const fn value(&self) -> T {
+        self.0
+    }
+}
+
+impl<T, const BITS: usize> UInt<T, BITS>
+where
+    Self: Number,
+    T: Copy,
+{
+    const fn mask() -> T {
+        Self::MAX.0
     }
 }
 
@@ -53,15 +70,13 @@ where
 macro_rules! uint_impl {
     ($($type:ident),+) => {
         $(
+            impl<const BITS: usize> Number for UInt<$type, BITS> {
+                const BITS: usize = BITS;
+                const MIN: Self = Self(0);
+                const MAX: Self = Self(<$type as Number>::MAX >> (<$type as Number>::BITS - Self::BITS));
+            }
+
             impl<const BITS: usize> UInt<$type, BITS> {
-                /// Minimum value that can be represented by this type
-                pub const MIN: Self = Self(0);
-
-                /// Maximum value that can be represented by this type
-                /// Note that the existence of MAX also serves as a bounds check: If BITS is > available bits,
-                /// we will get a compiler error right here
-                pub const MAX: Self = Self($type::MAX >> ($type::BITS as usize - BITS));
-
                 /// Creates an instance. Panics if the given value is outside of the valid range
                 pub const fn new(value: $type) -> Self {
                     assert!(value <= Self::MAX.0);
@@ -98,8 +113,8 @@ uint_impl!(u8, u16, u32, u64, u128);
 // Arithmetic implementations
 impl<T, const BITS: usize> Add for UInt<T, BITS>
 where
+    Self: Number,
     T: PartialEq
-        + Eq
         + Copy
         + BitAnd<T, Output = T>
         + Not<Output = T>
@@ -125,6 +140,7 @@ where
 
 impl<T, const BITS: usize> AddAssign for UInt<T, BITS>
 where
+    Self: Number,
     T: PartialEq
         + Eq
         + Not<Output = T>
@@ -151,6 +167,7 @@ where
 
 impl<T, const BITS: usize> Sub for UInt<T, BITS>
 where
+    Self: Number,
     T: Copy
         + BitAnd<T, Output = T>
         + Sub<T, Output = T>
@@ -168,6 +185,7 @@ where
 
 impl<T, const BITS: usize> SubAssign for UInt<T, BITS>
 where
+    Self: Number,
     T: Copy
         + SubAssign<T>
         + BitAnd<T, Output = T>
@@ -251,6 +269,7 @@ where
 
 impl<T, const BITS: usize> Not for UInt<T, BITS>
 where
+    Self: Number,
     T: Copy
         + BitAnd<T, Output = T>
         + BitXor<T, Output = T>
@@ -268,6 +287,7 @@ where
 
 impl<T, TSHIFTBITS, const BITS: usize> Shl<TSHIFTBITS> for UInt<T, BITS>
 where
+    Self: Number,
     T: Copy
         + BitAnd<T, Output = T>
         + Shl<TSHIFTBITS, Output = T>
@@ -285,6 +305,7 @@ where
 
 impl<T, TSHIFTBITS, const BITS: usize> ShlAssign<TSHIFTBITS> for UInt<T, BITS>
 where
+    Self: Number,
     T: Copy
         + BitAnd<T, Output = T>
         + BitAndAssign<T>
